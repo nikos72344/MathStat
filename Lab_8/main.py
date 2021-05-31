@@ -1,50 +1,199 @@
-import numpy as np
 import matplotlib.pyplot as plt
-import scipy.stats as sts
+import math
+import numpy as np
 
 
-"""Для двух выборок размерами 20 и 100 элементов, сгенерированных
-согласно нормальному закону 𝑁(𝑥, 0, 1), для параметров положения и
-масштаба построить асимптотически нормальные интервальные оценки на основе точечных оценок метода максимального 
-правдоподобия и классические интервальные оценки на основе статистик 𝜒^2 и Стьюдента. 
-В качестве параметра надёжности взять 𝛾 = 0.95"""
+LEN_SIGNAl = 1024
 
 
-size = [20, 100]
-alpha = 0.05
-interval = []
+def read_file(filename):
+    data = []
+    with open(filename, 'r') as f:
+        for line in f.readlines():
+            remove_dirst_str = line.replace("[", "")
+            remove_next_str = remove_dirst_str.replace("]", "")
+            data.append(remove_next_str.split(", "))
 
-def MLE(distr):
-    m = np.mean(distr)
-    s = np.std(distr)
-    return m, s
+    data_float_format = []
+    for item in data:
+        data_float_format.append([float(x) for x in item])
 
-
-def normal(m, s, distr):
-    n = len(distr)
-    interval.append(m - s * sts.t.ppf(1 - alpha / 2, n - 1) / (n - 1) ** 0.5)
-    interval.append(m + s * sts.t.ppf(1 - alpha / 2, n - 1) / (n - 1) ** 0.5)
-    interval.append(s * (n / sts.chi2.ppf((1 - alpha / 2), n - 1)) ** 0.5)
-    interval.append(s * (n / sts.chi2.ppf((alpha / 2), n - 1)) ** 0.5)
-    return interval
+    new_data = np.asarray(data_float_format)
+    data = np.reshape(new_data, (new_data.shape[1] // LEN_SIGNAl, LEN_SIGNAl))
+    return data[1]
 
 
-def random(m, s, distr):
-    n = len(distr)
-    interval.append(m - s * sts.norm.ppf(1 - alpha / 2) / (n ** 0.5))
-    interval.append(m + s * sts.norm.ppf(1 - alpha / 2) / (n ** 0.5))
-    e = sts.moment(distr, 4) / s ** 4 - 3
-    interval.append(s * (1 + 0.5 * sts.norm.ppf(1 - alpha / 2) * (((e + 2) / n) ** 0.5)) ** (-0.5))
-    interval.append(s * (1 - 0.5 * sts.norm.ppf(1 - alpha / 2) * (((e + 2) / n) ** 0.5)) ** (-0.5))
-    return interval
+def draw_signal(signal, title):
+    plt.title(title)
+    plt.plot(range(len(signal)), signal)
+    plt.savefig("signal.jpg")
+    plt.show()
 
 
-for i in size:
-    distr = np.random.normal(0, 1, i)
-    m, s = MLE(distr)
-    normal(m, s, distr)
-    print("mu: ", interval[0], interval[1], " sigma: ", interval[2], interval[3])
-    interval.clear()
-    random(m, s, distr)
-    print("mu: ", interval[0], interval[1], " sigma: ", interval[2], interval[3])
-    interval.clear()
+def draw_hist(signal):
+    bin = int(math.log2(len(signal) + 1))
+    hist = plt.hist(signal, bins=bin)
+    plt.title("Гистограмма сигнала")
+    plt.savefig("hist.jpg")
+    plt.show()
+    return bin, hist
+
+
+def get_converted_data(signal, start, finish, types):
+    signal_types = [0] * len(signal)
+    zones = []
+    zones_type = []
+
+    for i in range(len(signal)):
+        for j in range(len(types)):
+            if (signal[i] >= start[j]) and (signal[i] <= finish[j]):
+                signal_types[i] = types[j]
+
+    currType = signal_types[0]
+    start = 0
+    for i in range(len(signal_types)):
+        if currType != signal_types[i]:
+            finish = i
+            zones_type.append(currType)
+            zones.append([start, finish])
+            start = finish
+            currType = signal_types[i]
+
+    if currType != zones_type[len(zones_type) - 1]:
+        zones_type.append(currType)
+        zones.append([finish, len(signal) - 1])
+
+    return zones, zones_type, get_signal_data(signal, zones)
+
+
+def get_signal_data(signal, zones):
+    signal_data = list()
+    for borders in zones:
+        data_part = list()
+        for j in range(borders[0], borders[1]):
+            data_part.append(signal[j])
+        signal_data.append(data_part)
+    return signal_data
+
+
+def draw_areas(signal_data, area_data, types, title):
+    plt.title(title)
+    plt.ylim([-0.5, 0])
+    for i in range(len(area_data)):
+        if types[i] == "фон":
+            color_ = 'y'
+        if types[i] == "сигнал":
+            color_ = 'r'
+        if types[i] == "переход":
+            color_ = 'g'
+        #print(types)
+        plt.plot([num for num in range(area_data[i][0], area_data[i][1], 1)], signal_data[i], color=color_, label=types[i])
+        plt.savefig('areas.jpg')
+    plt.legend()
+    plt.show()
+
+
+def inter_Group(signal, k):
+    sum_n = 0
+    sum = 0
+    for signal_i in signal:
+        sum_n += len(signal_i)
+
+    for signal_i in signal:
+        mean_i = np.mean(signal_i)
+        for signal_j in signal_i:
+            sum += (signal_j - mean_i) ** 2 * len(signal_i)
+    return sum / (sum_n - k)
+
+
+def inta_Group(signal, k):
+    sum_n = 0
+    sum = 0
+    means = list()
+    for signal_i in signal:
+        sum_n += len(signal_i)
+        means.append(np.mean(signal_i))
+    main_mean = np.mean(means)
+    for signal_i in signal:
+        sum += (np.mean(signal_i) - main_mean) ** 2 * len(signal_i)
+    return sum / (k - 1)
+
+
+def get_new_selection(signal, k):
+    newSizeY = int(signal.size / k)
+    newSizeX = k
+    return np.reshape(signal, (newSizeX, newSizeY))
+
+
+def get_F(signal, k):
+    splitetd_signal = get_new_selection(signal, k)
+    print("при k = " + str(k))
+    inter_D = inter_Group(splitetd_signal, k)
+    print("inter_group = " + str(inter_D))
+    inta_D = inta_Group(splitetd_signal, k)
+    print("intar_group = " + str(inta_D))
+    print("F = " + str(inta_D / inter_D), '\n')
+    return inter_D / inta_D
+
+
+def get_K(num):
+    i = 4
+    while num % i != 0:
+        i += 1
+    return i
+
+
+def get_Fisher(signal, area_data):
+    fishers = []
+    for i in range(len(area_data)):
+        start = area_data[i][0]
+        finish = area_data[i][1]
+        k = get_K(finish - start)
+        while k == finish - start:
+            finish += 1
+            k = get_K(finish - start)
+        fishers.append(get_F(signal[start:finish], int(k)))
+    return fishers
+
+
+def get_areas(signal):
+    bin = int(math.log2(len(signal) + 1))
+    hist = plt.hist(signal, bins=bin)
+    plt.title("Histogram")
+
+    count = []
+    start = []
+    finish = []
+    types = [0] * bin
+
+    for i in range(bin):
+        count.append(hist[0][i])
+        start.append(hist[1][i])
+        finish.append(hist[1][i + 1])
+
+    sortedHist = sorted(count)
+    repeat = 0
+    for i in range(bin):
+        for j in range(bin):
+            if sortedHist[len(sortedHist) - 1 - i] == count[j]:
+                if repeat == 0:
+                    types[j] = "фон"
+                elif repeat == 1:
+                    types[j] = "сигнал"
+                else:
+                    types[j] = "переход"
+                repeat += 1
+
+    return start, finish, types
+
+
+signal = read_file('wave_ampl.txt')
+draw_signal(signal, 'Сигнал ' + '2')
+draw_hist(signal)
+start, finish, types = get_areas(signal)
+zones, zones_types, signal_data = get_converted_data(signal, start, finish, types)
+fishers = get_Fisher(signal, zones)
+print(fishers)
+types = ['фон', 'переход', 'сигнал', 'переход', 'фон']
+draw_areas(signal_data, zones, types, "Разделенные области для сигнала без выбросов")
+print(zones)
