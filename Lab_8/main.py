@@ -20,7 +20,7 @@ def read_file(filename):
 
     new_data = np.asarray(data_float_format)
     data = np.reshape(new_data, (new_data.shape[1] // LEN_SIGNAl, LEN_SIGNAl))
-    return data[1]
+    return data[2]
 
 
 def draw_signal(signal, title):
